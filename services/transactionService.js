@@ -1,0 +1,115 @@
+const Customer = require("../models/Customer");
+const Transaction = require("../models/Transaction");
+const { billGeneration, markInvoicesPaid, createTransaction, createInvoice } = require("../utils/helper");
+
+// fetch the customer transactions
+const fetchCustomerTransations = async (data)=>{
+    try
+    {
+        const {
+            customerId,
+        } = data;
+    
+        const transactions = await Transaction.find({customerId}).sort('-createdAt');
+        return transactions;
+    }
+    catch(error)
+    {
+        console.error(`Error fetching the transactions for customerId ${customerId}: ${error.message}`);
+        throw new Error(error.message)
+    }
+
+}
+
+// TopUp
+const topUp = async (data)=> {
+    try
+    {
+        const {customerId, amount} = data
+
+        const session = await mongoose.startSession();
+        session.startTransaction();
+        
+        await billGeneration(session, customerId);
+    
+        const customer = await Customer.findById(customerId);
+        if (!customer) {
+            throw new Error('Customer Not Found');
+        }
+    
+        const topUpAmount = parseInt(amount);
+        let remainingAmount = topUpAmount;
+    
+        if (customer.outstandingBalance > 0) {
+            if (topUpAmount < customer.outstandingBalance) {
+                throw new Error('Top-up amount must be equal to or greater than the outstanding balance')
+            }
+            
+            if (topUpAmount >= customer.outstandingBalance) {
+                remainingAmount = topUpAmount - customer.outstandingBalance;
+                customer.outstandingBalance = 0;
+                await markInvoicesPaid(session, customerId)
+    
+            }
+        }
+    
+        let beforeUpdateCurrentBalance = customer.currentBalance;
+        customer.currentBalance += topUpAmount;
+        let afterUpdateCurrentBalance = customer.currentBalance;
+
+        await createTransaction(
+            session,
+            customerId,
+            'TopUp',
+            'billed',
+            {
+                name: 'Top up',
+                price: topUpAmount,
+                amount: topUpAmount,
+                calculatedTax: 0,
+                tax: 0,
+                note: `Top up of Rs ${topUpAmount}`
+            },
+            beforeUpdateCurrentBalance,
+            afterUpdateCurrentBalance,
+            'credit'
+        );
+    
+        const lineItems = [{
+            description: 'Top Up',
+            amount: amount,
+        }];
+
+        const invoiceData= {
+            customerId: customerId,
+            totalAmount,
+            totalPrice,
+            totalTax: 0,
+            status: 'paid',
+            lineItems
+        };
+
+        await createInvoice(session, invoiceData);
+        await Customer.updateOne(
+            { _id: customerId},
+            { $inc: { 'currentBalance': topUpAmount } },
+            { session }
+        );
+
+        await session.commitTransaction();
+        session.endSession();
+    }
+    catch(error)
+    {
+        console.log(`Error in topup ${error.message}`);
+        await session.abortTransaction();
+        session.endSession();
+        throw new Error('Unable to topup your account')
+    }
+}
+
+
+module.exports = {
+    fetchCustomerTransations,
+    topUp
+}
