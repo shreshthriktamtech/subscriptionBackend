@@ -1,6 +1,6 @@
 const { default: mongoose } = require("mongoose");
 const Customer = require("../models/Customer");
-const { findCurrentActivePlan } = require("../utils/helper");
+const { findCurrentActivePlan, billGeneration } = require("../utils/helper");
 const Transaction = require("../models/Transaction");
 const Invoice = require("../models/Invoice");
 
@@ -134,11 +134,53 @@ const resetAccount = async (data) => {
     }
 };
 
+const deactivateAccount = async (data)=>{
+    let session;
+    try
+    {
+        const {customerId} = data;
+
+        session = await mongoose.startSession();
+        session.startTransaction();
+        
+        await billGeneration(session, customerId);
+
+        await Customer.updateOne(
+            { _id: customerId, 'pricingPlans.isActive': true },
+            {
+                $set: {
+                    'pricingPlans.$.isActive': false,
+                    'pricingPlans.$.endDate': new Date(),
+                    'isActive': false
+                }
+            },
+            {session}
+        );
+
+        await session.commitTransaction();
+        session.endSession();
+    }
+    catch(error)
+    {
+        console.log(error.message)
+        if(session)
+        {  
+            await session.abortTransaction();
+            session.endSession();
+        }
+        
+        throw new Error(err.message)
+    }
+}
+
+
+
 
 module.exports = {
     customerDetails,
     createCustomer,
     getCustomers,
     userPlans,
-    resetAccount
+    resetAccount,
+    deactivateAccount
 }

@@ -20,6 +20,10 @@ const customerSchema = new Schema({
         type: String
     }
   },
+  isActive: {
+    type: Boolean,
+    default: true,
+  },
   region: {
     type: String
   },

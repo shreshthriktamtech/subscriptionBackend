@@ -33,6 +33,7 @@ const getCustomer = async (req, resp)=>{
     }
 }
 
+// reset the customer account
 const resetAccount = async (req, resp) => {
     try{
         await customerService.resetAccount(req.body)
@@ -42,6 +43,7 @@ const resetAccount = async (req, resp) => {
     }
 };
 
+// get the user plans
 const userPlans = async (req, resp) =>{
     try {
         const plans = await customerService.userPlans(req.body)
@@ -50,10 +52,22 @@ const userPlans = async (req, resp) =>{
         return sendErrorResponse(resp, 500, error.message);
     }
 }
+
+// deactivate the user account
+const deactivateAccount = async (req, resp) =>{
+    try {
+        await customerService.deactivateAccount(req.body)
+        return sendSuccessResponse(resp, 200, 'Deactivate Account');
+    } catch (error) {
+        return sendErrorResponse(resp, 500, error.message);
+    }
+}
+
 module.exports = {
     createCustomer,
     getCustomers,
     getCustomer,
     resetAccount,
-    userPlans
+    userPlans,
+    deactivateAccount
 }

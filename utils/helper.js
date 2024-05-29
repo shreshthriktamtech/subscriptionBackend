@@ -40,7 +40,6 @@ const findCurrentActivePlan = async(session, customerId)=>{
     }
 }
 
-
 const isActivePlan = async(session, customerId)=>{
     try {
         const customerPlan = await Customer.findOne(
@@ -60,8 +59,7 @@ const isActivePlan = async(session, customerId)=>{
 }
 
 
-const billGeneration = async (session, customerId) => {
-    
+const billGeneration = async (session, customerId) => {   
     try {
 
         const customer = await findCustomerById(session, customerId);
@@ -77,43 +75,37 @@ const billGeneration = async (session, customerId) => {
 
         const transactions = await Transaction.find(criteria).session(session);
 
-        if (transactions.length === 0) {
-            throw new Error('No Transactions are there to be billed')
+        if (transactions.length > 0) {
+            const totalAmount = transactions.reduce((acc, transaction) => acc + (transaction.details.amount || 0), 0);
+            const totalPrice = transactions.reduce((acc, transaction) => acc + (transaction.details.price || 0), 0);
+            const totalTax = transactions.reduce((acc, transaction) => acc + (transaction.details.calculatedTax || 0), 0);
+    
+            const lineItems = transactions.map(transaction => ({
+                description: transaction.type,
+                amount: transaction.details.price
+            }));
+    
+            lineItems.push({
+                description: 'Tax (18%)',
+                amount: totalTax,
+            });
+    
+            const invoiceData= {
+                customerId: customerId,
+                totalAmount,
+                totalPrice,
+                totalTax,
+                lineItems
+            };
+    
+            await createInvoice(session, invoiceData);
+            await billTransactions(session, criteria);
+            const data = {
+                customerId,
+                amount: totalAmount
+            }
+            await updateOutstandingBalance(session, data);    
         }
-
-        const totalAmount = transactions.reduce((acc, transaction) => acc + (transaction.details.amount || 0), 0);
-        const totalPrice = transactions.reduce((acc, transaction) => acc + (transaction.details.price || 0), 0);
-        const totalTax = transactions.reduce((acc, transaction) => acc + (transaction.details.calculatedTax || 0), 0);
-
-        const lineItems = transactions.map(transaction => ({
-            description: transaction.type,
-            amount: transaction.details.price
-        }));
-
-        lineItems.push({
-            description: 'Tax (18%)',
-            amount: totalTax,
-        });
-
-        const invoiceData= {
-            customerId: customerId,
-            totalAmount,
-            totalPrice,
-            totalTax,
-            lineItems
-        };
-
-        console.log('here');
-        await createInvoice(session, invoiceData);
-        console.log('here2');
-        await billTransactions(session, criteria);
-        console.log('here3');
-        const data = {
-            customerId,
-            amount: totalAmount
-        }
-        await updateOutstandingBalance(session, data);
-
     } catch (error) {
         console.error(`'Error generating invoice: ${error.message}`);
         throw new Error(`'Error generating invoice: ${error.message}`)
@@ -360,7 +352,7 @@ const updateOutstandingBalance = async (session, data) => {
         } = data
         await Customer.updateOne(
             { _id: customerId},
-            { $inc: {'currentBalance': amount}
+            { $inc: {'outstandingBalance': amount}
             },
             { session }
         );
@@ -883,7 +875,7 @@ const createTransaction = async (session, customerId, type, status, details, bef
 };
 
 
-async function consumePackage(session, customerId, activePlan) {
+const consumePackage = async (session, customerId, activePlan) => {
     try
     {
         console.log(`Consuming package plan for customer ID: ${customerId}`);
@@ -921,7 +913,7 @@ async function consumePackage(session, customerId, activePlan) {
     
 }
 
-async function consumePayAsYouGo(session, customerId, activePlan) {
+const consumePayAsYouGo = async (session, customerId, activePlan) => {
     try
     {
         const price = activePlan.details.interviewRate;
@@ -936,6 +928,67 @@ async function consumePayAsYouGo(session, customerId, activePlan) {
         throw new Error('Something went wrong')
     }
 
+}
+
+
+const bonusTopUp = async (session, customerId, amount)=> {
+    try
+    {
+        await billGeneration(session, customerId);
+    
+        const customer = await Customer.findById(customerId);
+        if (!customer) {
+            throw new Error('Customer Not Found');
+        }
+    
+        const bonusAmount = parseInt(amount);
+    
+        if (customer.outstandingBalance > 0) {
+            if (bonusAmount < customer.outstandingBalance) {
+                throw new Error('Bonus amount must be equal to or greater than the outstanding balance')
+            }
+            
+            if (bonusAmount >= customer.outstandingBalance) {
+                customer.outstandingBalance = 0;
+                await markInvoicesPaid(session, customerId)
+    
+            }
+        }
+    
+        let beforeUpdateCurrentBalance = customer.currentBalance;
+        customer.currentBalance += bonusAmount;
+        let afterUpdateCurrentBalance = customer.currentBalance;
+
+
+        let note = `Bonus of ${bonusAmount} is given`; 
+        await createTransaction(
+            session,
+            customerId,
+            'Bonus',
+            'promo_credit',
+            {
+                price: bonusAmount,
+                tax: 0,
+                calculatedTax: 0,
+                amount: bonusAmount,
+                note
+            },
+            beforeUpdateCurrentBalance,
+            afterUpdateCurrentBalance,
+            'credit'
+        );
+
+        await Customer.updateOne(
+            {_id: customerId},
+            {$inc: {'currentBalance': bonusAmount}},
+            { session }
+        );
+    }
+    catch(error)
+    {
+        console.log(`Error in topup ${error.message}`);
+        throw new Error(error.message)
+    }
 }
 
 module.exports = { 
@@ -960,6 +1013,7 @@ module.exports = {
     renewProRatedPayAsYouGoPlan,
     handleTransactionPayment,
     consumePayAsYouGo,
-    consumePackage
+    consumePackage,
+    bonusTopUp
 
 };

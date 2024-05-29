@@ -1,3 +1,4 @@
+const { default: mongoose } = require("mongoose");
 const Customer = require("../models/Customer");
 const Transaction = require("../models/Transaction");
 const { billGeneration, markInvoicesPaid, createTransaction, createInvoice } = require("../utils/helper");
@@ -23,11 +24,12 @@ const fetchCustomerTransations = async (data)=>{
 
 // TopUp
 const topUp = async (data)=> {
+    let session
     try
     {
         const {customerId, amount} = data
 
-        const session = await mongoose.startSession();
+        session = await mongoose.startSession();
         session.startTransaction();
         
         await billGeneration(session, customerId);
@@ -102,11 +104,17 @@ const topUp = async (data)=> {
     catch(error)
     {
         console.log(`Error in topup ${error.message}`);
-        await session.abortTransaction();
-        session.endSession();
-        throw new Error('Unable to topup your account')
+        if(session)
+        {
+            await session.abortTransaction();
+            session.endSession();
+        }
+
+        throw new Error(error.message)
     }
 }
+
+
 
 
 module.exports = {

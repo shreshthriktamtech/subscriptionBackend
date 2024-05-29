@@ -1,6 +1,6 @@
 const { default: mongoose } = require("mongoose");
 const Customer = require("../models/Customer");
-const { findCustomerById, findPlanById, isActivePlan, calculateProration, createNewPackagePlan, createNewPayAsYouGoPlan, billGeneration, calculateRenewalDate, findCurrentActivePlan, createPackagePlan, createPayAsYouGoPlan, changePlan, renewProRatedPackagePlan, renewProRatedPayAsYouGoPlan, handleTransactionPayment, renewPackagePlan } = require("../utils/helper");
+const { findCustomerById, findPlanById, isActivePlan, calculateProration, createNewPackagePlan, createNewPayAsYouGoPlan, billGeneration, calculateRenewalDate, findCurrentActivePlan, createPackagePlan, createPayAsYouGoPlan, changePlan, renewProRatedPackagePlan, renewProRatedPayAsYouGoPlan, handleTransactionPayment, renewPackagePlan, bonusTopUp } = require("../utils/helper");
 const Transaction = require("../models/Transaction");
 const Plan = require("../models/Plan");
 
@@ -40,7 +40,8 @@ const assignPlanToCustomer = async (data) =>{
         planId,
         customerId,
         isProRated,
-        proRatedEndDate
+        proRatedEndDate,
+        bonus
     } = data;
 
     const session = await mongoose.startSession();
@@ -64,7 +65,10 @@ const assignPlanToCustomer = async (data) =>{
         }
 
         const date = new Date();
-
+        if(parseInt(bonus)>0)
+        {
+            await bonusTopUp(session, customerId, bonus);
+        }
         if (plan.type === 'Package') {
 
             if (isProRated) {
@@ -75,8 +79,6 @@ const assignPlanToCustomer = async (data) =>{
                     plan.interviewsPerQuota = Math.round(proRatedInterviews);
                 }
             }
-
-
             note = `Package Assigned ${plan.name}`;
             await handleTransactionPayment(session, customerId, plan.price, "AssignPackage", note);
             
@@ -313,9 +315,10 @@ const renewPlan = async (data) => {
 
 const planChangeRequest = async (data) => {
     const { customerId, planId } = data;
+    let session;
 
     try {
-        const session = await mongoose.startSession();
+        session = await mongoose.startSession();
         session.startTransaction();
 
         const currentDate = new Date();
@@ -326,7 +329,7 @@ const planChangeRequest = async (data) => {
             throw new Error ('Customer not found')
         };
 
-        const activePlan = await findCurrentActivePlan(customer_id);
+        const activePlan = await findCurrentActivePlan(session, customerId);
         if(!activePlan)
         {
             throw new Error ('Active Plan not found')
@@ -349,10 +352,13 @@ const planChangeRequest = async (data) => {
         session.endSession();
 
     } catch (error) {
-        await session.abortTransaction();
-        session.endSession();
+        if(session)
+        {
+            await session.abortTransaction();
+            session.endSession();
+        }
         console.log(`Plan change request failed ${error.message}`)
-        throw new Error('Plan change request failed')
+        throw new Error(error.message)
     }
 };
 
