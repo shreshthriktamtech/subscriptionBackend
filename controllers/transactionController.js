@@ -44,9 +44,23 @@ const updateBillingCycle = async (req, resp) =>{
     }
 }
 
+const promoTopUp = async (req, resp)=>{
+    try
+    {
+        await transactionService.promoTopUp(req.body)
+        return sendSuccessResponse(resp, 200, 'Bonus given')
+    }
+    catch(error)
+    {
+        console.log(`Error occured while fetching the customer transactions ${error.message}`)
+        return sendErrorResponse(resp, 500 , error.message);
+    }
+}
+
 
 module.exports = {
     customerTransactions,
     topUp,
-    updateBillingCycle
+    updateBillingCycle,
+    promoTopUp
 }
