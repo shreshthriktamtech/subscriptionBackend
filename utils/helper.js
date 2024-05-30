@@ -586,6 +586,7 @@ const changePlan = async(session, customerId, currentPlan) =>{
     }
     catch(error)
     {
+        console.log(error.message);
         throw new Error('Something went wrong here');
     }
 }
@@ -638,7 +639,7 @@ const changePlanFromPackageToPayAsYouGo = async(session, customer, currentPlan, 
     try
     {
         const customerId = customer._id;
-        await billGeneration(sesssion, customerId);
+        await billGeneration(session, customerId);
         await Customer.updateOne(
             { _id: customerId, 'pricingPlans.isActive': true },
             { $set: { 
@@ -649,8 +650,7 @@ const changePlanFromPackageToPayAsYouGo = async(session, customer, currentPlan, 
             { session }
         );
 
-
-
+        const date = new Date();
         const renewalDate = calculateRenewalDate(date, "monthly");
         await createNewPayAsYouGoPlan(session, customerId, changePlan, renewalDate, false)
 
@@ -663,6 +663,7 @@ const changePlanFromPackageToPayAsYouGo = async(session, customer, currentPlan, 
     }
     catch(error)
     {
+        console.log(error.message)
         throw new Error('Error in changePlanFromPackageToPayAsYouGo')
     }
 }
