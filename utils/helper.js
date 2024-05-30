@@ -2,6 +2,7 @@ const Plan = require("../models/Plan");
 const Customer = require("../models/Customer");
 const Transaction = require("../models/Transaction");
 const Invoice = require("../models/Invoice");
+const { descriptions } = require("./constants");
 
 
 const findPlanById = async (session, planId) => {
@@ -33,7 +34,7 @@ const findCurrentActivePlan = async(session, customerId)=>{
         if (customerPlan && customerPlan.pricingPlans.length > 0) {
             return customerPlan.pricingPlans[0];
         } else {
-            throw new Error("No active plan found for the customer");
+            return null;
         }
     } catch (error) {
         throw error;
@@ -304,12 +305,11 @@ const createInvoice = async (session, data)=>{
             'totalPrice': data.totalPrice,
             'totalTax': data.totalTax,
             'currency': 'INR',
-            'status': 'unpaid',
+            'status': data.status || 'unpaid',
             'lineItems': data.lineItems
         });
 
         await newInvoice.save({session});
-        console.log('Invoice generated');
     }
     catch(error)
     {
@@ -331,7 +331,6 @@ const billTransactions = async (session, data)=>{
             { $set: { status: 'billed' }},
             {session} 
         );
-        console.log('Transaction Updated generated');
     }
     catch(error)
     {
@@ -426,7 +425,8 @@ const renewPackagePlan = async (session, customerId ,activePlan) =>{
             await billGeneration(session, customerId);
         }
 
-        let note = `Package Renewal of ${plan.price}`
+        let note = `Package Renewal of ${plan.name}`
+        note = `${getNotes('PackageRenewal')} ${plan.name}`;
         await handleTransactionPayment(session, customerId, plan.price, 'PackageRenewal', note);
         
         if(customer.paymentType=='Prepaid')
@@ -464,6 +464,7 @@ const renewProRatedPackagePlan = async (session, customerId, activePlan)=>{
         }
 
         note = `Package Renewal of ${plan.name}`
+        note = `${getNotes('PackageRenewal')} ${plan.name}`;
         await handleTransactionPayment(session, customerId, plan.price, 'PackageRenewal', note);
         
         if(customer.paymentType=='Prepaid')
@@ -564,11 +565,11 @@ const changePlan = async(session, customerId, currentPlan) =>{
             }
             if(changePlan.type == 'Package')
             {
-                await changePlanFromPackageToPackage(session, customer, currentPlan, changePlan)
+                await changePlanFromPackageToPackage(session, customer, plan, changePlan)
             }
             if(changePlan.type == 'PayAsYouGo')
             {
-                await changePlanFromPackageToPayAsYouGo(session, customer, currentPlan, changePlan)
+                await changePlanFromPackageToPayAsYouGo(session, customer, plan, changePlan)
             }
             
         }
@@ -596,8 +597,8 @@ const changePlanFromPackageToPackage = async(session, customer, currentPlan, cha
             await billGeneration(session, customerId);
         }
         
-        note = `Change Plan from ${currentPlan.name} to ${changePlan.name}`
-
+        // note = `Change Plan from ${currentPlan.name} to ${changePlan.name}`
+        note = `${getNotes('ChangePlan')} ${changePlan.name}`;
         await handleTransactionPayment(session, customerId, changePlan.price, 'ChangePlan', note)
 
         if(customer.paymentType=='Prepaid')
@@ -673,8 +674,8 @@ const changePlanFromPayAsYouGoToPackage = async(session, customer, currentPlan, 
             await billGeneration(session, customerId);
         }
         
-        note = `Change Plan from ${currentPlan.name} to ${changePlan.name}`
-
+        // note = `Change Plan from ${currentPlan.name} to ${changePlan.name}`
+        note = `${getNotes('ChangePlan')} ${changePlan.name}`;
         await handleTransactionPayment(session, customerId, changePlan.price, 'ChangePlan', note)
 
         if(customer.paymentType=='Prepaid')
@@ -897,6 +898,7 @@ const consumePackage = async (session, customerId, activePlan) => {
             console.log(`Interviews used exceeds per quota limit for customer ID: ${customerId}, charging additional rate`);
             const price = additionalInterviewRate;
             let note = `Additional Interview Charge @ ${price}`
+            note = getNotes('AdditionalInterviewCharge')
             await handleTransactionPayment(session, customerId, price, 'AdditionalInterviewCharge', note);
             await Customer.updateOne(
                 { _id: customerId, 'pricingPlans.isActive': true },
@@ -919,12 +921,12 @@ const consumePayAsYouGo = async (session, customerId, activePlan) => {
         const price = activePlan.details.interviewRate;
         console.log(`Consuming PayAsYouGo plan for customer ID: ${customerId} at rate ${price}`);
         let note = `Charge of Interview @ ${price}`
+        note = getNotes('InterviewCharge')
         await handleTransactionPayment(session, customerId, price , "InterviewCharge", note);
     
     }
     catch(error)
     {
-        console.log('error');
         throw new Error('Something went wrong')
     }
 
@@ -961,6 +963,7 @@ const bonusTopUp = async (session, customerId, amount)=> {
 
 
         let note = `Bonus of ${bonusAmount} is given`; 
+        note = getNotes('Bonus');
         await createTransaction(
             session,
             customerId,
@@ -991,6 +994,70 @@ const bonusTopUp = async (session, customerId, amount)=> {
     }
 }
 
+const getNotes = (transactionType)=>{
+    return descriptions[transactionType] || "";
+}
+
+const changeInterViewRate = async(session, customerId, interviewRate) =>{
+    try
+    {
+        const customer = await findCustomerById(session, customerId);
+        if (!customer)
+        {
+            throw new Error('Customer Not Found');
+        }
+    
+        const activePlan = await findCurrentActivePlan(session, customerId);
+        if(!activePlan)
+        {
+            console.log("No active plan found for the customer, skipping interview rate update.");
+            return;  
+        }
+        if(activePlan.type=='PayAsYouGo')
+        {
+    
+            if(activePlan.interviewRate == interviewRate)
+            {
+                console.log("Same interview rate is there");
+                return; 
+            }
+            await Customer.updateOne(
+                { _id: customerId, 'pricingPlans.isActive': true },
+                { $set: 
+                    { 
+                        'pricingPlans.$.isActive': false,
+                        'pricingPlans.$.endDate': new Date(),
+                    } 
+                },
+                { session }
+            );
+    
+            const date = new Date(); 
+            const newCustomerPlan = {
+                planId: activePlan._id,
+                startDate: date,
+                endDate: null,
+                type: 'PayAsYouGo',
+                isActive: true,
+                details: {
+                    name: activePlan.name,
+                    interviewRate: interviewRate,
+                },
+                renewalDate: activePlan.renewalDate,
+            };
+        
+            customer.pricingPlans.push(newCustomerPlan);
+            await customer.save({session});    
+        }
+    }
+    catch(error)
+    {
+        console.log(error)
+        throw new Error(error.message);
+    }
+
+}
+
 module.exports = { 
     findPlanById, 
     findCustomerById, 
@@ -1014,6 +1081,8 @@ module.exports = {
     handleTransactionPayment,
     consumePayAsYouGo,
     consumePackage,
-    bonusTopUp
+    bonusTopUp,
+    getNotes,
+    changeInterViewRate
 
 };

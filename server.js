@@ -4,7 +4,7 @@ const cors = require('cors')
 require('./config/db')
 const app = express()
 const PORT = process.env.PORT || 5000
-const { renewPlanCron } = require('./crons/renewPlan')
+// const { renewPlanCronJob } = require('./crons/renewPlan')
 
 app.use(cors())
 app.use(express.json())

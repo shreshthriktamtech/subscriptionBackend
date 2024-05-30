@@ -31,50 +31,6 @@ const topUp = async (req, resp)=>{
     }
 }
 
-const updateCustomer = async (req, resp) => {
-    try {
-        const customerId = req.params.id;
-        const { email, name, phone, currency, tax, paymentType, canOveruseInterviews, interviewRate } = req.body;
-        console.log(req.body)
-
-        // Validate email format
-        if (email && !/^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/.test(email)) {
-            return resp.status(400).json({ message: "Invalid email format" });
-        }
-
-        // Validate phone format
-        if (phone && !/^(\([0-9]{3}\) ?|[0-9]{3}-?)[0-9]{3}-?[0-9]{4}$/.test(phone)) {
-            return resp.status(400).json({ message: "Invalid phone number format" });
-        }
-
-        // Create an update object
-        const updateFields = {};
-        if (email) updateFields.email = email;
-        if (name) updateFields.name = name;
-        if (currency) updateFields.currency = currency;
-        if (tax) updateFields.tax = tax;
-        if (paymentType) updateFields.paymentType = paymentType;
-        if (interviewRate) updateFields.interviewRate = interviewRate;
-        if (canOveruseInterviews!==undefined) updateFields.canOveruseInterviews  = canOveruseInterviews;
-        
-        if (phone) {
-            updateFields['contactInformation.phone'] = phone;
-        }
-
-        const customer = await Customer.findByIdAndUpdate(customerId, updateFields, { new: true });
-
-        if (!customer) {
-            return resp.status(404).json({ message: "Customer not found" });
-        }
-        await changeInterViewRate(customerId, interviewRate)
-        resp.status(200).json({ message: "Customer updated successfully", customer });
-        
-    } catch (error) {
-        console.error(error);
-        resp.status(500).json({ message: "Server error" });
-    }
-};
-
 const updateBilling = async (req, resp) =>{
     const session = await mongoose.startSession();
     session.startTransaction();
@@ -131,52 +87,6 @@ const updateBilling = async (req, resp) =>{
     
 }
 
-const changeInterViewRate = async(customerId, interviewRate) =>{
-    try
-    {
-        const currentDate = new Date();
-        const customer = await findCustomerById(customerId);
-        if (!customer) return handleNotFound(resp, 'Customer not found');
-    
-        const activePlan = await findCurrentActivePlan(customerId);
-    
-        if(activePlan.type=='PayAsYouGo')
-        {
-    
-            await Customer.updateOne(
-                { _id: customerId, 'pricingPlans.isActive': true },
-                { $set: 
-                    { 
-                        'pricingPlans.$.isActive': false
-                    } 
-                },
-            );
-    
-            const date = new Date(); 
-            const newCustomerPlan = {
-                planId: activePlan._id,
-                startDate: date,
-                endDate: null,
-                type: 'PayAsYouGo',
-                isActive: true,
-                details: {
-                    name: activePlan.name,
-                    interviewRate: interviewRate,
-                },
-                renewalDate: activePlan.renewalDate,
-            };
-        
-            customer.pricingPlans.push(newCustomerPlan);
-            await customer.save();    
-        }
-    }
-    catch(error)
-    {
-        console.log(error)
-        console.log('her');
-    }
-
-}
 
 const calculateProration = (currentDate, proRatedEndDate, plan) => {
     if(plan.type=='Package')
@@ -200,6 +110,5 @@ const calculateProration = (currentDate, proRatedEndDate, plan) => {
 module.exports = {
     customerTransactions,
     topUp,
-    updateCustomer,
     updateBilling
 }

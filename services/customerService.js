@@ -1,6 +1,6 @@
 const { default: mongoose } = require("mongoose");
 const Customer = require("../models/Customer");
-const { findCurrentActivePlan, billGeneration } = require("../utils/helper");
+const { findCurrentActivePlan, billGeneration, changeInterViewRate } = require("../utils/helper");
 const Transaction = require("../models/Transaction");
 const Invoice = require("../models/Invoice");
 
@@ -173,6 +173,69 @@ const deactivateAccount = async (data)=>{
     }
 }
 
+const updateCustomer = async (data) => {
+    let session;
+    try {
+
+        session = await mongoose.startSession();
+        session.startTransaction();
+
+        const {
+            customerId, 
+            email, 
+            name, 
+            phone, 
+            currency, 
+            tax, 
+            paymentType, 
+            canOveruseInterviews, 
+            interviewRate 
+        } = data;
+
+        // Validate email format
+        if (email && !/^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/.test(email)) {
+            throw new Error('Invalid email format');
+        }
+
+        // Validate phone format
+        if (phone && !/^(\([0-9]{3}\) ?|[0-9]{3}-?)[0-9]{3}-?[0-9]{4}$/.test(phone)) {
+            throw new Error ("Invalid phone number format");
+        }
+
+        // Create an update object
+        const updateFields = {};
+        if (email) updateFields.email = email;
+        if (name) updateFields.name = name;
+        if (currency) updateFields.currency = currency;
+        if (tax) updateFields.tax = tax;
+        if (paymentType) updateFields.paymentType = paymentType;
+        if (interviewRate) updateFields.interviewRate = interviewRate;
+        if (canOveruseInterviews!==undefined) updateFields.canOveruseInterviews  = canOveruseInterviews;
+        
+        if (phone) {
+            updateFields['contactInformation.phone'] = phone;
+        }
+
+        const customer = await Customer.findByIdAndUpdate(customerId, updateFields, { new: true, session });
+
+        if (!customer) {
+            throw new Error ("Customer Not Found");
+        }
+        await changeInterViewRate(session, customerId, interviewRate)
+        
+        await session.commitTransaction();
+        session.endSession();
+        
+    } catch (error) {
+        if(session)
+        {
+            await session.abortTransaction();
+            session.endSession();
+        }
+        console.error(error);
+        throw new Error(error.message)
+    }
+};
 
 
 
@@ -182,5 +245,6 @@ module.exports = {
     getCustomers,
     userPlans,
     resetAccount,
-    deactivateAccount
+    deactivateAccount,
+    updateCustomer
 }

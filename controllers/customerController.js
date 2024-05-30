@@ -63,11 +63,24 @@ const deactivateAccount = async (req, resp) =>{
     }
 }
 
+const updateCustomer = async (req, resp) => {
+    try {
+        let data = req.body
+        data = {...data, "customerId": req.params.id}
+        console.log(data);
+        await customerService.updateCustomer(data)
+        return sendSuccessResponse(resp, 200, 'Account Updated');
+    } catch (error) {
+        return sendErrorResponse(resp, 500, error.message);
+    }
+};
+
 module.exports = {
     createCustomer,
     getCustomers,
     getCustomer,
     resetAccount,
     userPlans,
-    deactivateAccount
+    deactivateAccount,
+    updateCustomer
 }

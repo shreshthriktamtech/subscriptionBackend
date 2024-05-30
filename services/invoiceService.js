@@ -1,6 +1,6 @@
 const { default: mongoose } = require("mongoose");
 const Invoice = require("../models/Invoice");
-const { billGeneration, findCustomerById } = require("../utils/helper");
+const { billGeneration, findCustomerById, getNotes } = require("../utils/helper");
 
 // Generate Bill
 const generateBill = async (data) => {
@@ -118,7 +118,7 @@ const payBill = async(data) => {
     customer.outstandingBalance-=invoice.totalAmount
     customer.currentBalance+=invoice.totalAmount
     const afterUpdateCurrentBalance = customer.currentBalance
-
+    note = getNotes('BillPaid')
     const transaction = new Transaction({
         customerId: customerId,
         type: 'BillPaid',
@@ -128,7 +128,7 @@ const payBill = async(data) => {
         details: {
             name: 'Bill Paid',
             amount: invoice.totalAmount,
-            note: "Bill Paid" 
+            note: note 
         },
         transactionType: 'credit',
         beforeUpdateCurrentBalance,

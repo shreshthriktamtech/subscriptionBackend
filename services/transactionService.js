@@ -1,7 +1,7 @@
 const { default: mongoose } = require("mongoose");
 const Customer = require("../models/Customer");
 const Transaction = require("../models/Transaction");
-const { billGeneration, markInvoicesPaid, createTransaction, createInvoice } = require("../utils/helper");
+const { billGeneration, markInvoicesPaid, createTransaction, createInvoice, getNotes } = require("../utils/helper");
 
 // fetch the customer transactions
 const fetchCustomerTransations = async (data)=>{
@@ -34,7 +34,7 @@ const topUp = async (data)=> {
         
         await billGeneration(session, customerId);
     
-        const customer = await Customer.findById(customerId);
+        const customer = await Customer.findById(customerId).session(session);
         if (!customer) {
             throw new Error('Customer Not Found');
         }
@@ -59,6 +59,7 @@ const topUp = async (data)=> {
         customer.currentBalance += topUpAmount;
         let afterUpdateCurrentBalance = customer.currentBalance;
 
+        let note = getNotes('TopUp')
         await createTransaction(
             session,
             customerId,
@@ -70,13 +71,13 @@ const topUp = async (data)=> {
                 amount: topUpAmount,
                 calculatedTax: 0,
                 tax: 0,
-                note: `Top up of Rs ${topUpAmount}`
+                note: note
             },
             beforeUpdateCurrentBalance,
             afterUpdateCurrentBalance,
             'credit'
         );
-    
+
         const lineItems = [{
             description: 'Top Up',
             amount: amount,
@@ -84,8 +85,8 @@ const topUp = async (data)=> {
 
         const invoiceData= {
             customerId: customerId,
-            totalAmount,
-            totalPrice,
+            'totalAmount': topUpAmount,
+            'totalPrice': topUpAmount,
             totalTax: 0,
             status: 'paid',
             lineItems
@@ -94,10 +95,12 @@ const topUp = async (data)=> {
         await createInvoice(session, invoiceData);
         await Customer.updateOne(
             { _id: customerId},
-            { $inc: { 'currentBalance': topUpAmount } },
+            { $set: 
+                { 'currentBalance': customer.currentBalance,
+                  'outstandingBalance': customer.outstandingBalance
+                } },
             { session }
         );
-
         await session.commitTransaction();
         session.endSession();
     }

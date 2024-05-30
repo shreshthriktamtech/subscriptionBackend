@@ -1,4 +1,8 @@
+const Customer = require('../models/Customer');
+const Transaction = require('../models/Transaction');
+const Payment = require('../models/Payment');
 const invoiceService = require('../services/invoiceService');
+const { getNotes } = require('../utils/helper');
 const { sendSuccessResponse, sendErrorResponse } = require('../utils/response');
 
 // Generate Bills
@@ -20,7 +24,6 @@ const customerBills = async (req, resp) => {
         const invoices = await invoiceService.customerBills(req.body);
         return sendSuccessResponse(resp, 200, 'Invoices', invoices);
     } catch (error) {
-        console.log('dada')
         return sendErrorResponse(resp, 500, error.message)
     }
 };
@@ -68,6 +71,7 @@ const payBill = async(req, resp) => {
     customer.currentBalance+=invoice.totalAmount
     const afterUpdateCurrentBalance = customer.currentBalance
 
+    const note = getNotes('BillPaid');
     const transaction = new Transaction({
         customerId: customerId,
         type: 'BillPaid',
@@ -77,7 +81,7 @@ const payBill = async(req, resp) => {
         details: {
             name: 'Bill Paid',
             amount: invoice.totalAmount,
-            note: "Bill Paid" 
+            note: note,
         },
         transactionType: 'credit',
         beforeUpdateCurrentBalance,

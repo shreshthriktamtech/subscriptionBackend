@@ -1,6 +1,24 @@
 const { default: mongoose } = require("mongoose");
 const Customer = require("../models/Customer");
-const { findCustomerById, findPlanById, isActivePlan, calculateProration, createNewPackagePlan, createNewPayAsYouGoPlan, billGeneration, calculateRenewalDate, findCurrentActivePlan, createPackagePlan, createPayAsYouGoPlan, changePlan, renewProRatedPackagePlan, renewProRatedPayAsYouGoPlan, handleTransactionPayment, renewPackagePlan, bonusTopUp } = require("../utils/helper");
+const { 
+    findCustomerById, 
+    findPlanById, 
+    isActivePlan, 
+    calculateProration, 
+    createNewPackagePlan, 
+    createNewPayAsYouGoPlan, 
+    billGeneration, 
+    calculateRenewalDate, 
+    findCurrentActivePlan, 
+    createPackagePlan, 
+    createPayAsYouGoPlan, 
+    changePlan, 
+    renewProRatedPackagePlan, 
+    renewProRatedPayAsYouGoPlan, 
+    handleTransactionPayment, 
+    renewPackagePlan, 
+    bonusTopUp, 
+    getNotes } = require("../utils/helper");
 const Transaction = require("../models/Transaction");
 const Plan = require("../models/Plan");
 
@@ -80,6 +98,7 @@ const assignPlanToCustomer = async (data) =>{
                 }
             }
             note = `Package Assigned ${plan.name}`;
+            note = `${getNotes('AssignPackage')} ${plan.name}`;
             await handleTransactionPayment(session, customerId, plan.price, "AssignPackage", note);
             
             if (customer.paymentType === 'Prepaid') {
