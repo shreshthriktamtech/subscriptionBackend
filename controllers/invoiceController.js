@@ -1,8 +1,4 @@
-const Customer = require('../models/Customer');
-const Transaction = require('../models/Transaction');
-const Payment = require('../models/Payment');
 const invoiceService = require('../services/invoiceService');
-const { getNotes } = require('../utils/helper');
 const { sendSuccessResponse, sendErrorResponse } = require('../utils/response');
 
 // Generate Bills
@@ -30,72 +26,12 @@ const customerBills = async (req, resp) => {
 
 // pay the bill
 const payBill = async(req, resp) => {
-    const { invoiceId, customerId } = req.body;
-
-    const invoice = await Invoice.findById(invoiceId);
-    if (!invoice) {
-        return resp.status(404).json({
-            'message': 'Invoice not found'
-        });
+    try {
+        await invoiceService.payBill(req.body);
+        return sendSuccessResponse(resp, 200, 'Bill Paid');
+    } catch (error) {
+        return sendErrorResponse(resp, 500, error.message)
     }
-
-    const customer = await Customer.findById(customerId);
-    if (!customer) {
-        return resp.status(404).json({
-            message: 'Customer not found'
-        });
-    }
-
-
-    if(invoice.status=='paid')
-    {
-        return resp.status(404).json({
-            'message': 'Already Paid the Bill'
-        });
-    }
-
-    const date = new Date();
-    const payment = new Payment({
-        customerId,
-        invoiceId,
-        date,
-        amount: invoice.totalAmount,
-        status: "completed",
-    })
-    await payment.save()
-
-    let { currentBalance } = customer;
-
-    const beforeUpdateCurrentBalance = currentBalance
-    customer.outstandingBalance-=invoice.totalAmount
-    customer.currentBalance+=invoice.totalAmount
-    const afterUpdateCurrentBalance = customer.currentBalance
-
-    const note = getNotes('BillPaid');
-    const transaction = new Transaction({
-        customerId: customerId,
-        type: 'BillPaid',
-        date: date,
-        status: 'billed',
-        billingCycle: date,
-        details: {
-            name: 'Bill Paid',
-            amount: invoice.totalAmount,
-            note: note,
-        },
-        transactionType: 'credit',
-        beforeUpdateCurrentBalance,
-        afterUpdateCurrentBalance
-    })
-
-    await customer.save();
-    invoice.status='paid'
-    await invoice.save();
-    await transaction.save();
-
-    return resp.status(200).json({
-        'message': 'Bill Paid'
-    });
 };
 
 module.exports = {

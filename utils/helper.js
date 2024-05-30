@@ -414,6 +414,8 @@ const renewPackagePlan = async (session, customerId ,activePlan) =>{
                 $set: {
                     'pricingPlans.$.details.interviewsUsed': 0,
                     'pricingPlans.$.details.additionalInterviewsUsed': 0,
+                    'pricingPlans.$.details.interviewsPerQuota': plan.interviewsPerQuota,
+                    'pricingPlans.$.details.additionalInterviewRate': plan.additionalInterviewRate,
                     'pricingPlans.$.renewalDate': newRenewalDate
                 }
             }, 

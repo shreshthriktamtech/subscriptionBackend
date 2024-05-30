@@ -1,8 +1,8 @@
 const express = require('express')
 const { consumeInterview } = require('../controllers/comsumeController')
-const { createPlan, getPlans, currentActivePlan, renewActivePlan, assignPlan, planChangeRequest, changePlanRequest, getPlanDetails } = require('../controllers/planController')
+const { createPlan, getPlans, currentActivePlan, renewActivePlan, assignPlan, planChangeRequest, getPlanDetails } = require('../controllers/planController')
 const { createCustomer, getCustomers, getCustomer, resetAccount, userPlans, deactivateAccount, updateCustomer } = require('../controllers/customerController')
-const { customerTransactions, topUp, updateBilling } = require('../controllers/transactionController')
+const { customerTransactions, topUp, updateBillingCycle } = require('../controllers/transactionController')
 const { generateBill, customerBills, payBill } = require('../controllers/invoiceController')
 
 const router = express.Router()
@@ -28,10 +28,9 @@ router.post('/change-plan', planChangeRequest)
 router.post('/consume-interview', consumeInterview)
 router.post('/deactivate', deactivateAccount);
 router.put('/update-customer/:id', updateCustomer);
-
-router.post('/change-plan-request', changePlanRequest);
-router.post('/update-billing/', updateBilling);
 router.post('/pay-bill', payBill)
+router.post('/update-billing/', updateBillingCycle);
+
 
 
 module.exports = router

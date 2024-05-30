@@ -1,6 +1,8 @@
 const { default: mongoose } = require("mongoose");
 const Invoice = require("../models/Invoice");
-const { billGeneration, findCustomerById, getNotes } = require("../utils/helper");
+const { billGeneration, findCustomerById, getNotes, createTransaction } = require("../utils/helper");
+const Customer = require("../models/Customer");
+const Payment = require("../models/Payment");
 
 // Generate Bill
 const generateBill = async (data) => {
@@ -66,8 +68,11 @@ const customerBills = async (data) => {
 };
 
 const payBill = async(data) => {
+    let session;
     try
     {
+        const {invoiceId, customerId} = data;
+
         const session = await mongoose.startSession();
         session.startTransaction();
 
@@ -80,74 +85,75 @@ const payBill = async(data) => {
         if (!customer) {
             throw new Error('Customer not found')
         }
-
         
         if(invoice.status=='paid')
         {
             throw new Error('Already paid the bill')
         }
 
+        const date = new Date();
+
+        const payment = new Payment({
+            customerId,
+            invoiceId,
+            date,
+            amount: invoice.totalAmount,
+            status: "completed",
+        })
+        await payment.save({ session })
+    
+        let { currentBalance } = customer;
+    
+        const beforeUpdateCurrentBalance = currentBalance
+
+        customer.outstandingBalance-=invoice.totalAmount
+        customer.currentBalance+=invoice.totalAmount
+
+        const afterUpdateCurrentBalance = customer.currentBalance
+    
+        const note = getNotes('BillPaid');
+        await createTransaction(
+            session,
+            customerId,
+            'BillPaid',
+            'billed',
+            {
+                name: 'Bill Paid',
+                price: invoice.totalAmount,
+                amount: invoice.totalAmount,
+                calculatedTax: 0,
+                tax: 0,
+                note: note
+            },
+            beforeUpdateCurrentBalance,
+            afterUpdateCurrentBalance,
+            'credit'
+        )
+    
+    
+        await customer.save({session});
+        invoice.status='paid'
+        await invoice.save({session});
+        
+        await session.commitTransaction();
+        session.endSession();
     }
     catch(error)
     {
-
+        if(session)
+        {
+            await session.abortTransaction();
+           session.endSession
+        }
+        console.log(error.message);
+        throw new Error(error.message);
     }
-    const { invoiceId, customerId } = req.body;
-
-
-    if(invoice.status=='paid')
-    {
-        return resp.status(404).json({
-            'message': 'Already Paid the Bill'
-        });
-    }
-
-    const date = new Date();
-    const payment = new Payment({
-        customerId,
-        invoiceId,
-        date,
-        amount: invoice.totalAmount,
-        status: "completed",
-    })
-    await payment.save()
-
-    let { currentBalance } = customer;
-
-    const beforeUpdateCurrentBalance = currentBalance
-    customer.outstandingBalance-=invoice.totalAmount
-    customer.currentBalance+=invoice.totalAmount
-    const afterUpdateCurrentBalance = customer.currentBalance
-    note = getNotes('BillPaid')
-    const transaction = new Transaction({
-        customerId: customerId,
-        type: 'BillPaid',
-        date: date,
-        status: 'billed',
-        billingCycle: date,
-        details: {
-            name: 'Bill Paid',
-            amount: invoice.totalAmount,
-            note: note 
-        },
-        transactionType: 'credit',
-        beforeUpdateCurrentBalance,
-        afterUpdateCurrentBalance
-    })
-
-    await customer.save();
-    invoice.status='paid'
-    await invoice.save();
-    await transaction.save();
-
-    return resp.status(200).json({
-        'message': 'Bill Paid'
-    });
 };
 
 
 
 module.exports = {
     generateBill,
-    customerBills
+    customerBills,
+    payBill
 }

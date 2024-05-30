@@ -1,4 +1,3 @@
-const Customer = require("../models/Customer");
 const consumeInterviewService = require('../services/consumeInterviewService');
 const { sendErrorResponse, sendSuccessResponse } = require("../utils/response");
 

@@ -1,5 +1,3 @@
-const Customer = require('../models/Customer');
-const Plan = require('../models/Plan');
 const planService = require('../services/planService');
 const { sendSuccessResponse, sendErrorResponse } = require('../utils/response');
 
@@ -14,7 +12,6 @@ const createPlan = async (req, resp) => {
     }
 };
 
-
 // get plans
 const getPlans = async (req, resp) => {
     try {
@@ -24,7 +21,6 @@ const getPlans = async (req, resp) => {
         return sendErrorResponse(resp, 500, error.message);
     }
 };
-
 
 // function to get current active plan
 const currentActivePlan = async (req, resp) => {
@@ -51,6 +47,7 @@ const assignPlan = async(req, resp) => {
     }
 };
 
+// request for plan change
 const planChangeRequest = async (req, resp) => {
     try
     {
@@ -64,6 +61,7 @@ const planChangeRequest = async (req, resp) => {
     }
 };
 
+// renew active plan
 const renewActivePlan = async (req, resp) => {
     try
     {
@@ -77,41 +75,7 @@ const renewActivePlan = async (req, resp) => {
     }
 };
 
-const changePlanRequest = async (req, resp) => {
-    const { customer_id } = req.body;
-    try {
-        const customer = await Customer.findById(customer_id);
-        if (customer.changePlanRequest.isActive) {
-            // If there is an active change plan request
-            const plan = await Plan.findById(customer.changePlanRequest.planId);
-            resp.status(200).json({
-                message: "Active Change Plan Request",
-                data: {
-                    changePlanRequest: customer.changePlanRequest,
-                    plan: plan
-                }
-            });
-        } else {
-            // If there is no active change plan request
-            resp.status(200).json({
-                message: "No Active Change Plan Request",
-                data: {
-                    isActive: false
-                }
-            });
-        }
-        
-    } catch (error) {
-        console.log(error);
-        resp.status(500).json({
-            message: "No Active Change Plan Request",
-            data: {
-                isActive: false
-            }
-        });
-    }
-};
-
+// get the current plan details
 const getPlanDetails = async (req, resp) => {
     try {
         const details = await planService.getPlanDetails(req.body)
@@ -128,6 +92,5 @@ module.exports = {
     assignPlan,
     renewActivePlan,
     planChangeRequest,
-    changePlanRequest,
     getPlanDetails
 }
