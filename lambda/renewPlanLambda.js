@@ -36,8 +36,20 @@ exports.handler = async (event) => {
             }
         }
         await mongoose.connection.close();
+
+        const response = {
+            statusCode: 200,
+            body: JSON.stringify(`Renewal Done for ${startOfToday.toDateString()}`),
+          };
+        return response;
     } catch (error) {
         console.error(`Error in Lambda function: ${error.message}`);
-        throw new Error(`Error in Lambda function: ${error.message}`);
+        const response = {
+            statusCode: 500,
+            body: JSON.stringify(`Opps! something went wrong in renewal for ${startOfToday.toDateString()}`),
+          };
+        return response;
+
+
     }
 };
