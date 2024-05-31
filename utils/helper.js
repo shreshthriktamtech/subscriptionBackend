@@ -59,7 +59,6 @@ const isActivePlan = async(session, customerId)=>{
     }
 }
 
-
 const billGeneration = async (session, customerId) => {   
     try {
 
@@ -225,32 +224,6 @@ const deactiveCurrentPlan = async (customerId, session) => {
 
 }
 
-const createNewPayAsYouGoPlanCustomRate = async (session, customerId, plan, renewalDate) => {
-    try
-    {
-        const customer = await Customer.findById(customerId).session(session);
-        const date = new Date(); 
-        const newCustomerPlan = {
-            planId: plan._id,
-            startDate: date,
-            endDate: null,
-            type: 'PayAsYouGo',
-            isActive: true,
-            details: {
-                name: plan.name,
-                interviewRate: plan.interviewRate,
-            },
-            renewalDate,
-        };
-    
-        customer.pricingPlans.push(newCustomerPlan);
-        await customer.save({ session });    
-    }
-    catch(error)
-    {
-        throw new Error('Error while creating the PayAsYouGo')
-    }
-}
 
 const createPackagePlan = async(session, data)=>{
     try
@@ -531,7 +504,6 @@ const renewProRatedPayAsYouGoPlan = async (session, customerId, activePlan)=>{
         throw new Error('Error in renewing the payAsYouGo plan')
     }
 }
-
 
 const changePlan = async(session, customerId, currentPlan) =>{
 
@@ -878,7 +850,6 @@ const createTransaction = async (session, customerId, type, status, details, bef
     }
 };
 
-
 const consumePackage = async (session, customerId, activePlan) => {
     try
     {
@@ -934,7 +905,6 @@ const consumePayAsYouGo = async (session, customerId, activePlan) => {
     }
 
 }
-
 
 const bonusTopUp = async (session, customerId, amount)=> {
     try
@@ -1019,7 +989,7 @@ const changeInterViewRate = async(session, customerId, interviewRate) =>{
         if(activePlan.type=='PayAsYouGo')
         {
     
-            if(activePlan.interviewRate == interviewRate)
+            if(activePlan.details.interviewRate == interviewRate)
             {
                 console.log("Same interview rate is there");
                 return; 
