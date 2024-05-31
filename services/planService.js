@@ -266,9 +266,6 @@ const generateBill = async (data) => {
 }
 
 
-
-
-
 const renewPlan = async (data) => {
     const { customerId } = data;
     let session;
