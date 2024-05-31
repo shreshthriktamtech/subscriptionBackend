@@ -18,64 +18,63 @@ const {
     handleTransactionPayment, 
     renewPackagePlan, 
     bonusTopUp, 
-    getNotes } = require("../utils/helper");
+    getNotes 
+} = require("../utils/helper");
 const Transaction = require("../models/Transaction");
 const Plan = require("../models/Plan");
 
-
-
-// function to get the current active plan for the customer
+// Function to get the current active plan for the customer
 const currentActivePlan = async (data) => {
     const { customerId } = data;
 
     try {
+        console.log(`Fetching current active plan for customer: ${customerId}`);
         const session = await mongoose.startSession();
         session.startTransaction();
 
         const customer = await findCustomerById(session, customerId);
-        if (!customer)
-        {
-            throw new Error('Customer Not found')
+        if (!customer) {
+            throw new Error('Customer Not found');
         }
+        console.log(`Customer found: ${customer._id}`);
 
         const activePlan = await findCurrentActivePlan(session, customerId);
-        if (!activePlan)
-        {
-            throw new Error('No Active plan found')
+        if (!activePlan) {
+            throw new Error('No Active plan found');
         }
-        
-        return activePlan;
+        console.log(`Active plan found: ${activePlan._id}`);
 
+        await session.commitTransaction();
+        session.endSession();
+
+        return activePlan;
     } catch (error) {
-        throw new Error(error.message)
+        console.error(`Error fetching current active plan: ${error.message}`);
+        throw new Error(error.message);
     }
 };
 
-
-// assign a plan to customer
-const assignPlanToCustomer = async (data) =>{
-    const {
-        planId,
-        customerId,
-        isProRated,
-        proRatedEndDate,
-        bonus
-    } = data;
+// Assign a plan to customer
+const assignPlanToCustomer = async (data) => {
+    const { planId, customerId, isProRated, proRatedEndDate, bonus } = data;
 
     const session = await mongoose.startSession();
     session.startTransaction();
 
     try {
+        console.log(`Assigning plan to customer: ${customerId}, plan: ${planId}, isProRated: ${isProRated}, proRatedEndDate: ${proRatedEndDate}, bonus: ${bonus}`);
         let note = "";
         const customer = await findCustomerById(session, customerId);
         if (!customer) {
-            throw new Error('Customer not found')
+            throw new Error('Customer not found');
         }
+        console.log(`Customer found: ${customer._id}`);
 
         const plan = await findPlanById(session, planId);
         if (!plan) {
-            throw new Error('Plan not found')
+            throw new Error('Plan not found');
         }
+        console.log(`Plan found: ${plan._id}`);
 
         const isActive = await isActivePlan(session, customerId);
         if (isActive) {
@@ -83,15 +82,14 @@ const assignPlanToCustomer = async (data) =>{
         }
 
         const date = new Date();
-        if(parseInt(bonus)>0)
-        {
+        if (parseInt(bonus) > 0) {
             await bonusTopUp(session, customerId, bonus);
+            console.log(`Bonus top-up done: ${bonus}`);
         }
-        if (plan.type === 'Package') {
 
+        if (plan.type === 'Package') {
             if (isProRated) {
                 const { proRatedPrice, proRatedInterviews } = calculateProration(date, new Date(proRatedEndDate), plan);
-                
                 if (proRatedPrice && proRatedInterviews) {
                     plan.price = Math.round(proRatedPrice);
                     plan.interviewsPerQuota = Math.round(proRatedInterviews);
@@ -100,172 +98,153 @@ const assignPlanToCustomer = async (data) =>{
             note = `Package Assigned ${plan.name}`;
             note = `${getNotes('AssignPackage')} ${plan.name}`;
             await handleTransactionPayment(session, customerId, plan.price, "AssignPackage", note);
-            
-            if (customer.paymentType === 'Prepaid') {
+            console.log(`Transaction payment handled for package: ${plan.name}`);
 
+            if (customer.paymentType === 'Prepaid') {
                 await billGeneration(session, customerId);
-                console.log('transaction done');
+                console.log('Bill generation done for prepaid customer');
             }
 
-            const renewalDate = isProRated ? proRatedEndDate : calculateRenewalDate(date, plan.quotaValidity)
-            await createNewPackagePlan(session, customerId, plan, renewalDate, isProRated)
-
+            const renewalDate = isProRated ? proRatedEndDate : calculateRenewalDate(date, plan.quotaValidity);
+            await createNewPackagePlan(session, customerId, plan, renewalDate, isProRated);
+            console.log('New package plan created');
         } else if (plan.type === 'PayAsYouGo') {
-
-            const renewalDate = isProRated ? proRatedEndDate : calculateRenewalDate(date, "monthly")
-            await createNewPayAsYouGoPlan(session, customerId, plan, renewalDate, isProRated)
+            const renewalDate = isProRated ? proRatedEndDate : calculateRenewalDate(date, "monthly");
+            await createNewPayAsYouGoPlan(session, customerId, plan, renewalDate, isProRated);
+            console.log('New pay-as-you-go plan created');
         }
 
         await session.commitTransaction();
         session.endSession();
-
+        console.log('Transaction committed and session ended successfully');
     } catch (error) {
         await session.abortTransaction();
         session.endSession();
         console.error(`Error assigning plan: ${error.message}`);
-        throw new Error(error.message)
+        throw new Error(error.message);
     }
-}
+};
 
-
-
-// get the details of the plan while assigning
+// Get the details of the plan while assigning
 const getPlanDetails = async (data) => {
-    try
-    {
-        const { 
-            customerId, 
-            planId, 
-            isProRated, 
-            proRatedEndDate 
-        } = data;
+    try {
+        const { customerId, planId, isProRated, proRatedEndDate } = data;
+        console.log(`Fetching plan details for customer: ${customerId}, plan: ${planId}, isProRated: ${isProRated}, proRatedEndDate: ${proRatedEndDate}`);
 
         const customer = await Customer.findById(customerId);
         if (!customer) {
-            throw new Error('Customer not found')
+            throw new Error('Customer not found');
         }
-    
+        console.log(`Customer found: ${customer._id}`);
+
         const plan = await Plan.findById(planId);
         if (!plan) {
-            throw new Error('Plan not found')
+            throw new Error('Plan not found');
         }
-    
+        console.log(`Plan found: ${plan._id}`);
+
         let planData;
-    
+
         if (plan.type === 'Package') {
-    
             let price = plan.price;
             let interviewsIncluded = plan.interviewsPerQuota;
-    
+
             if (isProRated && proRatedEndDate) {
                 const currentDate = new Date();
                 const { proRatedPrice, proRatedInterviews } = calculateProration(currentDate, new Date(proRatedEndDate), plan);
                 price = proRatedPrice;
                 interviewsIncluded = proRatedInterviews;
             }
-    
+
             planData = {
                 'Name of Package': plan.name,
                 'Price of Package': price,
                 'Quota Validity': plan.quotaValidity,
                 'Interviews Included': interviewsIncluded,
-                'Additional Interview Rate': plan.additionalInterviewRate, 
+                'Additional Interview Rate': plan.additionalInterviewRate,
             };
-        }
-        if (plan.type === 'PayAsYouGo') {
-
+        } else if (plan.type === 'PayAsYouGo') {
             let interviewRate = customer.interviewRate || plan.interviewRate;
             planData = {
                 'Name of Package': plan.name,
                 'Interview Rate': interviewRate,
             };
         }
-        return planData ;
-    }
-    catch (error) {
+
+        console.log('Plan details fetched successfully');
+        return planData;
+    } catch (error) {
         console.error(`Error while fetching the plan details: ${error.message}`);
-        throw new Error(error.message)
+        throw new Error(error.message);
     }
-}
+};
 
-
-// create a new plan
+// Create a new plan
 const createPlan = async (data) => {
     try {
+        console.log('Creating a new plan with data:', data);
 
         const session = await mongoose.startSession();
         session.startTransaction();
-        
-        const {
-            name,
-            price,
-            type,
-            interviewRate,
-            additionalInterviewRate,
-            quotaValidity,
-            interviewsPerQuota
-        } = data;
 
-        if(type=='Package')
-        {
-            await createPackagePlan(session, data)
-        }
-        else if(type=='PayAsYouGo')
-        {
-            await createPayAsYouGoPlan(session, data)
+        const { name, price, type, interviewRate, additionalInterviewRate, quotaValidity, interviewsPerQuota } = data;
+
+        if (type == 'Package') {
+            await createPackagePlan(session, data);
+            console.log('Package plan created');
+        } else if (type == 'PayAsYouGo') {
+            await createPayAsYouGoPlan(session, data);
+            console.log('Pay-as-you-go plan created');
         }
 
         await session.commitTransaction();
         session.endSession();
-
+        console.log('Transaction committed and session ended successfully');
     } catch (error) {
-        console.log(`Error while creating a plan ${error.message}`)
+        console.error(`Error while creating a plan: ${error.message}`);
         await session.abortTransaction();
         session.endSession();
-        throw new Error('Not able to create a plan')
+        throw new Error('Not able to create a plan');
     }
 };
 
-
-// get the plans
-const getPlans = async ()=>{
-    try{
-
-        const plans = await Plan.find({isActive: true})
+// Get the plans
+const getPlans = async () => {
+    try {
+        console.log('Fetching active plans');
+        const plans = await Plan.find({ isActive: true });
+        console.log('Active plans fetched successfully');
         return plans;
+    } catch (error) {
+        console.error(`Unable to fetch plans: ${error.message}`);
+        throw new Error('Unable to fetch plans');
     }
-    catch(error)
-    {
-        console.log(`Unable to fetch plans ${error.message}`)
-        throw new Error('Unable to fetch plans')
-    }
-}
-
+};
 
 // Generate Bill
 const generateBill = async (data) => {
-    try
-    {
+    try {
         const { customerId } = data;
+        console.log(`Generating bill for customer: ${customerId}`);
 
         const session = await mongoose.startSession();
         session.startTransaction();
 
         await billGeneration(session, customerId);
+        console.log('Bill generation successful');
 
         await session.commitTransaction();
         session.endSession();
-    }
-    catch(error)
-    {
+        console.log('Transaction committed and session ended successfully');
+    } catch (error) {
         await session.abortTransaction();
         session.endSession();
-        console.log(`Error generating bills ${error.message}`)
-        throw new Error('Error whike generating the bill')
+        console.error(`Error generating bills: ${error.message}`);
+        throw new Error('Error while generating the bill');
     }
-}
+};
 
-
+// Renew Plan
 const renewPlan = async (data) => {
     const { customerId } = data;
     let session;
@@ -316,7 +295,6 @@ const renewPlan = async (data) => {
         await session.commitTransaction();
         session.endSession();
         console.log(`Transaction committed and session ended. Plan renewed for customer ${customerId}`);
-
     } catch (error) {
         if (session) {
             console.log('Aborting transaction due to error');
@@ -329,62 +307,56 @@ const renewPlan = async (data) => {
     }
 };
 
-
-
+// Plan Change Request
 const planChangeRequest = async (data) => {
     const { customerId, planId } = data;
     let session;
 
     try {
+        console.log(`Processing plan change request for customer ${customerId}, new plan ${planId}`);
         session = await mongoose.startSession();
         session.startTransaction();
 
         const currentDate = new Date();
 
-
         const customer = await findCustomerById(session, customerId);
-        if (!customer){
-            throw new Error ('Customer not found')
-        };
+        if (!customer) {
+            throw new Error('Customer not found');
+        }
+        console.log(`Customer found: ${customer._id}`);
 
         const activePlan = await findCurrentActivePlan(session, customerId);
-        if(!activePlan)
-        {
-            throw new Error ('Active Plan not found')
+        if (!activePlan) {
+            throw new Error('Active Plan not found');
         }
-        if(planId == activePlan.planId)
-        {
-            throw new Error ('Same Plan already activated for user');
+        console.log(`Current active plan found: ${activePlan._id}`);
+
+        if (planId == activePlan.planId) {
+            throw new Error('Same Plan already activated for user');
         }
 
-        details = {
+        const details = {
             isActive: true,
             planId: planId,
-            requestedDate:currentDate
-        }
+            requestedDate: currentDate
+        };
 
         customer.changePlanRequest = details;
-        await customer.save({session});
+        await customer.save({ session });
+        console.log('Change plan request saved successfully');
 
         await session.commitTransaction();
         session.endSession();
-
+        console.log('Transaction committed and session ended successfully');
     } catch (error) {
-        if(session)
-        {
+        if (session) {
             await session.abortTransaction();
             session.endSession();
         }
-        console.log(`Plan change request failed ${error.message}`)
-        throw new Error(error.message)
+        console.error(`Plan change request failed: ${error.message}`);
+        throw new Error(error.message);
     }
 };
-
-
-
-
-
-
 
 module.exports = {
     assignPlanToCustomer,
@@ -395,4 +367,4 @@ module.exports = {
     currentActivePlan,
     renewPlan,
     planChangeRequest
-}
+};

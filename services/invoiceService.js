@@ -6,89 +6,93 @@ const Payment = require("../models/Payment");
 
 // Generate Bill
 const generateBill = async (data) => {
-    try
-    {
+    let session;
+    try {
         const { customerId } = data;
+        console.log(`Generating bill for customer: ${customerId}`);
 
-        const session = await mongoose.startSession();
+        session = await mongoose.startSession();
         session.startTransaction();
 
         await billGeneration(session, customerId);
+        console.log('Bill generation successful');
 
         await session.commitTransaction();
+        console.log('Transaction committed successfully');
         session.endSession();
-    }
-    catch(error)
-    {
-        await session.abortTransaction();
-        session.endSession();
-        console.log(`Error generating bills ${error.message}`)
-        throw new Error('Error whike generating the bill')
+    } catch (error) {
+        if (session) {
+            await session.abortTransaction();
+            session.endSession();
+        }
+        console.log(`Error generating bills: ${error.message}`);
+        throw new Error('Error while generating the bill');
     }
 }
 
-// get customer Bills
+// Get customer Bills
 const customerBills = async (data) => {
-    let session
-    try
-    {
+    let session;
+    try {
         const { customerId } = data;
+        console.log(`Fetching bills for customer: ${customerId}`);
 
         session = await mongoose.startSession();
         session.startTransaction();
 
         const customer = await findCustomerById(session, customerId);
-        if (!customer){
-            throw new Error('Customer Not found')
-        };
-
-        const invoices = await Invoice.find({
-            customerId: customerId
-        }).sort('-createdAt').session(session);
-
-        if(invoices.length == 0)
-        {
-            throw new Error('No invoices are there')
+        if (!customer) {
+            throw new Error('Customer Not found');
         }
+        console.log(`Customer found: ${customer._id}`);
+
+        const invoices = await Invoice.find({ customerId: customerId })
+            .sort('-createdAt')
+            .session(session);
+
+        if (invoices.length == 0) {
+            throw new Error('No invoices are there');
+        }
+        console.log(`Invoices found: ${invoices.length}`);
+
         await session.commitTransaction();
         session.endSession();
 
         return invoices;
-    }
-    catch(error)
-    {
-        if(session)
-        {
+    } catch (error) {
+        if (session) {
             await session.abortTransaction();
             session.endSession();
         }
-        console.log(error);
+        console.log(`Error fetching customer bills: ${error.message}`);
         throw new Error('Something went wrong');
     }
 };
 
-const payBill = async(data) => {
+// Pay Bill
+const payBill = async (data) => {
     let session;
-    try
-    {
-        const {invoiceId, customerId} = data;
+    try {
+        const { invoiceId, customerId } = data;
+        console.log(`Paying bill for invoice: ${invoiceId}, customer: ${customerId}`);
 
-        const session = await mongoose.startSession();
+        session = await mongoose.startSession();
         session.startTransaction();
 
         const invoice = await Invoice.findById(invoiceId).session(session);
         if (!invoice) {
-            throw new Error('Invoice not found')
+            throw new Error('Invoice not found');
         }
+        console.log(`Invoice found: ${invoice._id}, status: ${invoice.status}`);
 
         const customer = await Customer.findById(customerId).session(session);
         if (!customer) {
-            throw new Error('Customer not found')
+            throw new Error('Customer not found');
         }
-        
-        if(invoice.status=='paid')
-        {
-            throw new Error('Already paid the bill')
+        console.log(`Customer found: ${customer._id}`);
+
+        if (invoice.status == 'paid') {
+            throw new Error('Already paid the bill');
         }
 
         const date = new Date();
@@ -99,18 +103,19 @@ const payBill = async(data) => {
             date,
             amount: invoice.totalAmount,
             status: "completed",
-        })
-        await payment.save({ session })
-    
+        });
+        await payment.save({ session });
+        console.log('Payment record saved');
+
         let { currentBalance } = customer;
-    
-        const beforeUpdateCurrentBalance = currentBalance
 
-        customer.outstandingBalance-=invoice.totalAmount
-        customer.currentBalance+=invoice.totalAmount
+        const beforeUpdateCurrentBalance = currentBalance;
 
-        const afterUpdateCurrentBalance = customer.currentBalance
-    
+        customer.outstandingBalance -= invoice.totalAmount;
+        customer.currentBalance += invoice.totalAmount;
+
+        const afterUpdateCurrentBalance = customer.currentBalance;
+
         const note = getNotes('BillPaid');
         await createTransaction(
             session,
@@ -123,33 +128,30 @@ const payBill = async(data) => {
                 amount: invoice.totalAmount,
                 calculatedTax: 0,
                 tax: 0,
-                note: note
+                note: note,
             },
             beforeUpdateCurrentBalance,
             afterUpdateCurrentBalance,
             'credit'
-        )
-    
-    
-        await customer.save({session});
-        invoice.status='paid'
-        await invoice.save({session});
-        
+        );
+        console.log('Transaction created');
+
+        await customer.save({ session });
+        invoice.status = 'paid';
+        await invoice.save({ session });
+
         await session.commitTransaction();
         session.endSession();
-    }
-    catch(error)
-    {
-        if(session)
-        {
+        console.log('Transaction committed successfully');
+    } catch (error) {
+        if (session) {
             await session.abortTransaction();
-           session.endSession
+            session.endSession();
         }
-        console.log(error.message);
+        console.log(`Error paying bill: ${error.message}`);
         throw new Error(error.message);
     }
 };
-
 
 
 module.exports = {

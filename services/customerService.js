@@ -4,24 +4,23 @@ const { findCurrentActivePlan, billGeneration, changeInterViewRate } = require("
 const Transaction = require("../models/Transaction");
 const Invoice = require("../models/Invoice");
 
-
-// function to create the customer
+// Function to create the customer
 const createCustomer = async (data) => {
     try {
-
         const { name, email, phone, region, paymentType } = data;
+        console.log(`Creating customer with data: ${JSON.stringify(data)}`);
 
         if (!/^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/.test(email)) {
-            throw new Error ('Invalid email format');
+            throw new Error('Invalid email format');
         }
 
         if (!/^(\([0-9]{3}\) ?|[0-9]{3}-?)[0-9]{3}-?[0-9]{4}$/.test(phone)) {
-            throw new Error ('Invalid phone number format');
+            throw new Error('Invalid phone number format');
         }
 
         const existingCustomer = await Customer.findOne({ $or: [{ email }, { 'contactInformation.phone': phone }] });
         if (existingCustomer) {
-            throw new Error ('Invalid phone number formatA customer with the same email or phone already exists');
+            throw new Error('A customer with the same email or phone already exists');
         }
 
         const customer = new Customer({
@@ -35,69 +34,64 @@ const createCustomer = async (data) => {
         });
 
         await customer.save();
-
+        console.log(`Customer created successfully: ${customer._id}`);
     } catch (error) {
-
-        console.log(error.message)
-        throw new error(error.message);
+        console.error(`Error creating customer: ${error.message}`);
+        throw new Error(error.message);
     }
 };
 
-
-// function to get the customers
+// Function to get the customers
 const getCustomers = async () => {
     try {
-        const customers = await Customer.find({})
+        console.log('Fetching all customers');
+        const customers = await Customer.find({});
+        console.log(`Fetched ${customers.length} customers`);
         return customers;
     } catch (error) {
-
-        console.log(error.message);
-        throw new error('Get customers');
+        console.error(`Error fetching customers: ${error.message}`);
+        throw new Error('Get customers');
     }
 };
 
-
 // Get Customer Details
-const customerDetails = async (data)=>{
-    try
-    {
-        const {
-            customerId,
-        } = data
-    
+const customerDetails = async (data) => {
+    try {
+        const { customerId } = data;
+        console.log(`Fetching details for customer ID: ${customerId}`);
+
         const customer = await Customer.findById(customerId);
-        if(!customer)
-        {
-            throw new Error('Customer not found')
+        if (!customer) {
+            throw new Error('Customer not found');
         }
+        console.log(`Customer details fetched for ID: ${customerId}`);
         return customer;
+    } catch (error) {
+        console.error(`Error fetching customer details for ID ${customerId}: ${error.message}`);
+        throw new Error('Error while fetching the customer');
     }
-    catch(error)
-    {
-        console.log(`Error while getting the customer`)
-        throw new Error(`Error while fetching the customer`)
-    }
+};
 
-}
-
-
-const userPlans = async (data) =>{
+// Function to get user plans
+const userPlans = async (data) => {
     const { customerId } = data;
     try {
+        console.log(`Fetching plans for customer ID: ${customerId}`);
         const customer = await Customer.findById(customerId);
-        return customer.pricingPlans
-
+        console.log(`Plans fetched for customer ID: ${customerId}`);
+        return customer.pricingPlans;
     } catch (error) {
+        console.error(`Error fetching plans for customer ID ${customerId}: ${error.message}`);
         throw new Error('Error in fetching the plans');
     }
-}
+};
 
+// Function to reset account
 const resetAccount = async (data) => {
-    let session
+    let session;
     const { customerId } = data;
     try {
-
-        console.log(customerId);
+        console.log(`Resetting account for customer ID: ${customerId}`);
         session = await mongoose.startSession();
         session.startTransaction();
 
@@ -105,44 +99,46 @@ const resetAccount = async (data) => {
         if (!customer) {
             throw new Error("Customer not found");
         }
-        
+
         customer.currentBalance = 0;
         customer.outstandingBalance = 0;
-        customer.pricingPlans = []; 
+        customer.pricingPlans = [];
         customer.changePlanRequest = {
             isActive: false,
             planId: null,
             requestedDate: null,
         };
-        
+
         await customer.save({ session });
 
-        await Transaction.deleteMany({customerId}).session(session);
-
-        await Invoice.deleteMany({customerId}).session(session);
+        await Transaction.deleteMany({ customerId }).session(session);
+        await Invoice.deleteMany({ customerId }).session(session);
 
         await session.commitTransaction();
-        session.endSession();
-
+        console.log(`Account reset successfully for customer ID: ${customerId}`);
     } catch (error) {
-        if(session)
-        {
-            await session.commitTransaction();
-            session.endSession();
+        if (session) {
+            await session.abortTransaction();
+            console.error(`Transaction aborted for customer ID ${customerId}: ${error.message}`);
         }
         throw new Error(error.message);
+    } finally {
+        if (session) {
+            session.endSession();
+        }
     }
 };
 
-const deactivateAccount = async (data)=>{
+// Function to deactivate account
+const deactivateAccount = async (data) => {
     let session;
-    try
-    {
-        const {customerId} = data;
+    try {
+        const { customerId } = data;
+        console.log(`Deactivating account for customer ID: ${customerId}`);
 
         session = await mongoose.startSession();
         session.startTransaction();
-        
+
         await billGeneration(session, customerId);
 
         await Customer.updateOne(
@@ -154,24 +150,24 @@ const deactivateAccount = async (data)=>{
                     'isActive': false
                 }
             },
-            {session}
+            { session }
         );
 
         await session.commitTransaction();
-        session.endSession();
-    }
-    catch(error)
-    {
-        console.log(error.message)
-        if(session)
-        {  
+        console.log(`Account deactivated successfully for customer ID: ${customerId}`);
+    } catch (error) {
+        console.error(`Error deactivating account for customer ID ${customerId}: ${error.message}`);
+        if (session) {
             await session.abortTransaction();
+        }
+        throw new Error(error.message);
+    } finally {
+        if (session) {
             session.endSession();
         }
-        
-        throw new Error(err.message)
     }
-}
+};
+
 
 const updateCustomer = async (data) => {
     let session;
