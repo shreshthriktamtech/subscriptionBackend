@@ -516,18 +516,13 @@ const changePlan = async(session, customerId, currentPlan) =>{
         }
 
         const plan = await findPlanById(session, currentPlan.planId);
-        if(!plan)
-        {
-            throw new Error('Plan not found');
-        }
-
         const changePlan = await findPlanById(session, customer.changePlanRequest.planId);
-        if(!changePlan)
+        if(!plan || !changePlan)
         {
             throw new Error('Plan not found');
         }
 
-        let note = ''
+
 
         if(currentPlan.type == 'Package')
         {

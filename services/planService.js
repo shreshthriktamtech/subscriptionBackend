@@ -285,16 +285,13 @@ const renewPlan = async (data) => {
             throw new Error('Customer not found')
         }
 
-        let note = ''
-
         const activePlan = await findCurrentActivePlan(session, customerId);
 
-        if(customer && customer.changePlanRequest && customer.changePlanRequest.isActive == true)
-        {
+        if(customer?.changePlanRequest?.isActive){
             await changePlan(session, customerId, activePlan)
         }
 
-        else if(activePlan.isProRated==true)
+        else if(activePlan.isProRated)
         {
             // Renew a proRated Package Plan
             if(activePlan.type=='Package') {
