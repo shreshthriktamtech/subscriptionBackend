@@ -17,7 +17,6 @@ const fetchCustomerTransations = async (data) => {
         console.error(`Error fetching the transactions for customerId ${customerId}: ${error.message}`);
         throw new Error(error.message)
     }
-
 }
 
 // TopUp
@@ -103,6 +102,7 @@ const topUp = async (data) => {
         );
         await session.commitTransaction();
         session.endSession();
+        console.log(`Top Up successful for customerId ${customerId} with amount ${topUpAmount}`);
     }
     catch (error) {
         console.log(`Error in topup ${error.message}`);

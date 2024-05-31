@@ -43,6 +43,7 @@ exports.handler = async (event) => {
           };
         return response;
     } catch (error) {
+        const startOfToday = new Date();
         console.error(`Error in Lambda function: ${error.message}`);
         const response = {
             statusCode: 500,
